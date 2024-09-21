@@ -1,6 +1,7 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 import requests
+config = dotenv_values(".env")
 
 load_dotenv()
 
@@ -8,6 +9,8 @@ GET = "GET"
 POST = "POST"
 DELETE = "DELETE"
 PUT = "PUT"
+
+from pymongo import MongoClient
 
 # task
     # query + store gamma api responses to db
@@ -23,13 +26,18 @@ class Market:
     def __init__(self, market, events):
     # def __init__(self, id, question, created_date, end_date, liquidity, outcomes, prices, volume):
         # check_correct_values(id, question, created_date, end_date, liquidity, outcomes, prices, volume)
+        # print("individual market: " + str(market))
         self.id = market['id']
-        # self.question = market['question']
-        self.event_id = market[0]['id']
+        self.question = market['question']
+        self.event_id = market['events'][0]['id']
         self.description = events[0]['title']
         self.slug = events[0]['slug']
         self.created_date = market['createdAt']
-        self.end_date = market['endDate']
+        if 'endDate' in market:
+            self.end_date = market['endDate']
+        else:
+            print("This market is missing an end date: " + market['id'])
+            self.end_date = '2025-12-31T12:00:00Z'
         if 'liquidity' in market:
             self.liquidity = market['liquidity']
         else:
@@ -37,24 +45,27 @@ class Market:
         self.outcomes = market['outcomes']
         self.prices = market['outcomePrices']
         self.volume = market['volume']
+        self.tokenIds = market['clobTokenIds']
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n" 
-    
     
 
 
 def main():
     host = "https://gamma-api.polymarket.com/markets?active=true&limit=25&liquidity_num_min=1&volume_num_min=1"
 
+    mongodb_client = MongoClient(config["ATLAS_URI"])
+    database = mongodb_client[config["DB_NAME"]]
+    collection = database["polymarket_events"]
+    print("Connected to Polymarket MongoDB database!")
+
     resp = requests.request(GET, host)
     if resp.status_code != 200:
         print("Request to gamma API erroring out, stopping execution")
         return
-    print("STATUS CODE: " + str(resp.status_code))
     print("num of markets: " + str( len( resp.json() ) ) )
     markets = resp.json()
-    # print(markets)
     list_markets = []
     for market in markets:
         m_event = market['events']
@@ -65,7 +76,14 @@ def main():
         new_market = Market(market, m_event)
         # new_market = Market(market['id'], market['question'], market['createdAt'], market['endDate'], market['liquidity'], market['outcomes'], market['outcomePrices'], market['volume'])
         list_markets.append(new_market)
-    print(list_markets)
 
+        # find if document exists in collection, otherwise push it
+        query = { 'id': new_market.id }
+        if collection.find_one(query) == None:
+            res = collection.insert_one(new_market.__dict__)
+            print("Inserted document id: "+ str(res.inserted_id))
+        else:
+            print("Market exists already, updates only happen during WS connection")
+    mongodb_client.close()
 
 main()

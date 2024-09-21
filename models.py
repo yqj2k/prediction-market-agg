@@ -19,3 +19,4 @@ class UpdateMarket(BaseModel):
     outcomes: Optional[ list[str] ]
     prices: Optional[ list[str] ]
     volume: Optional[str]
+

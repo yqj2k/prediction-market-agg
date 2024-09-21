@@ -1,5 +1,7 @@
 import pymongo
 from pymongo import MongoClient
+from dotenv import dotenv_values
+config = dotenv_values(".env")
 from bson.objectid import ObjectId
 
 class MongoDBClient:
@@ -38,7 +40,7 @@ class MongoDBClient:
 # Example usage
 if __name__ == "__main__":
     # Connect to the MongoDB server
-    mongo_client = MongoDBClient("mongodb://localhost:27017/", "test_db")
+    mongo_client = MongoDBClient(config["ATLAS_URI"], config["DB_NAME"])
 
     # Create a new document
     doc_id = mongo_client.create("test_collection", {"name": "Alice", "age": 30})
