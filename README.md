@@ -1,18 +1,16 @@
 # prediction-market-agg
 aggregating prediction market data for arbs n shhiii
 
-### Walkthrough
+# run api locally
 
-main, models, routes are used for db connection
-poly_scraper to scrape 
+Create .env file with ATLAS_URI and DB_NAME
+`pip install -r requirements.txt`
+`python poly_scraper.py`    
 
-main.py utf-8 encoding
-^Error with uvicorn fast-api download [here](https://stackoverflow.com/questions/75684738/not-able-to-run-fastapi-server-valueerror-source-code-string-cannot-contain-nu)
 
-## run server
-`make local venv env-pymongo-polymarket-crud`
-`python -m uvicorn main:app --reload`
+### to debug
 
+`python poly_scraper.py >> response.json`
 
 ## Order of operations
 - Query markets endpoint. Markets contain the odds
