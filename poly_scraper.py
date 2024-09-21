@@ -1,6 +1,14 @@
 import os
 from dotenv import load_dotenv, dotenv_values
 import requests
+import signal
+import logging
+import sys
+import asyncio
+import json
+
+import websocket_handler
+from websocket_processors.poly_ws_processor import PolySubscriptionMessage, PolyWSProcessor
 config = dotenv_values(".env")
 
 load_dotenv()
@@ -52,7 +60,7 @@ class Market:
     
 
 
-def main():
+async def main():
     host = "https://gamma-api.polymarket.com/markets?active=true&limit=25&liquidity_num_min=1&volume_num_min=1"
 
     mongodb_client = MongoClient(config["ATLAS_URI"])
@@ -84,6 +92,22 @@ def main():
             print("Inserted document id: "+ str(res.inserted_id))
         else:
             print("Market exists already, updates only happen during WS connection")
-    mongodb_client.close()
+    all_token_ids = [market.tokenIds for market in list_markets]
+    # If tokenIds is a list for each market and you want a single flattened list
+    flattened_token_ids = [token_id for sublist in (json.loads(x) for x in all_token_ids) for token_id in sublist]
+    poly_ws_processor = PolyWSProcessor(PolySubscriptionMessage(
+        {},
+        [], 
+        flattened_token_ids,
+        "Market"  
+    ))
+    await websocket_handler.open_ws_connection("wss://ws-subscriptions-clob.polymarket.com/ws/market", poly_ws_processor)
+    # mongodb_client.close()
 
-main()
+def signal_handler(sig, frame):
+    logging.info("Interrupt received, closing connection")
+    sys.exit(0)
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
+    asyncio.run(main())
