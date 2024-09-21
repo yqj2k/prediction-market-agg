@@ -45,6 +45,7 @@ class Market:
         self.outcomes = market['outcomes']
         self.prices = market['outcomePrices']
         self.volume = market['volume']
+        self.tokenIds = market['clobTokenIds']
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n" 
