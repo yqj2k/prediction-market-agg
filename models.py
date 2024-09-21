@@ -9,8 +9,8 @@ class Market(BaseModel):
     created_at: str = Field(alias="created_at")
     end_date: str = Field(alias="end_date")
     liquidity: str = Field(alias="liquidity")
-    outcomes: list[str] = Field(alias="outcomes")
-    prices: list[str] = Field(alias="prices")
+    outcomes: list[str] = Field(alias="outcomes") # Idx 0 = YES, Idx 1 = NO
+    prices: list[str] = Field(alias="prices") # Idx 0 = YES, Idx 1 = NO
     volume: str = Field(alias="volume")
     
 
