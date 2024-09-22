@@ -13,7 +13,7 @@ POST = "POST"
 DELETE = "DELETE"
 PUT = "PUT"
 
-HOST = "https://gamma-api.polymarket.com/markets?active=true&limit=25&liquidity_num_min=1&volume_num_min=1"
+HOST = "https://gamma-api.polymarket.com/markets?slug=will-a-democrat-win-michigan-presidential-election"
 WS_HOST = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 COLLECTION_NAME = "polymarket_events"
 

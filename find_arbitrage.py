@@ -18,6 +18,12 @@ def signal_handler(sig, frame):
     logging.info("Interrupt received, closing connection")
     sys.exit(0)
 
+async def run_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
+    # Schedule three calls *concurrently*:
+    await asyncio.gather(
+     init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
+        init_drift_ws(mongodb_client, arbitrage_handler)
+    )
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
@@ -28,10 +34,9 @@ if __name__ == "__main__":
     )
     arbitrage_handler = ArbitrageHandler(mongodb_client)
 
-    init_poly(mongodb_client, mongodb_poly_kv_store_client)
-    init_drift(mongodb_client)
+    # init_poly(mongodb_client, mongodb_poly_kv_store_client)
+    # init_drift(mongodb_client)
     
     asyncio.run(
-        init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
-        init_drift_ws(mongodb_client, arbitrage_handler)
+        run_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
     )
