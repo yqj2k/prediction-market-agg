@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class WSProcessor(ABC):
     @abstractmethod
-    def createSubcriptionMessage(self):
+    def createSubcriptionMessages(self):
         raise NotImplementedError("createSubcriptionMessage() must be implemented")
     
     @abstractmethod

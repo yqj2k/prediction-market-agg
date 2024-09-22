@@ -1,4 +1,3 @@
-from dotenv import load_dotenv, dotenv_values
 import requests
 import json
 
@@ -8,14 +7,15 @@ from websocket_processors.poly_ws_processor import (
     PolyWSProcessor,
 )
 
-config = dotenv_values(".env")
-
-load_dotenv()
 
 GET = "GET"
 POST = "POST"
 DELETE = "DELETE"
 PUT = "PUT"
+
+HOST = "https://gamma-api.polymarket.com/markets?active=true&limit=25&liquidity_num_min=1&volume_num_min=1"
+WS_HOST = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
+COLLECTION_NAME = "polymarket_events"
 
 
 # task
@@ -58,18 +58,12 @@ class Market:
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n"
 
 
-async def init_poly(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
-    host = "https://gamma-api.polymarket.com/markets?active=true&limit=25&liquidity_num_min=1&volume_num_min=1"
-
-    collection_name = "polymarket_events"
-    print("Connected to Polymarket MongoDB database!")
-
-    resp = requests.request(GET, host)
+def init_poly(mongodb_client, mongodb_poly_kv_store_client):
+    resp = requests.request(GET, HOST)
     if resp.status_code != 200:
         print("Request to gamma API erroring out, stopping execution")
         return
 
-    print("num of markets: " + str(len(resp.json())))
     markets = resp.json()
 
     list_markets = []
@@ -89,10 +83,10 @@ async def init_poly(mongodb_client, mongodb_poly_kv_store_client, arbitrage_hand
 
         # find if document exists in collection, otherwise push it
         query = {"_id": new_market._id}
-        existing_market = mongodb_client.read(collection_name, query)
+        existing_market = mongodb_client.read(COLLECTION_NAME, query)
 
-        if existing_market == None:
-            res = mongodb_client.create(collection_name, new_market.__dict__)
+        if existing_market is None:
+            res = mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
 
             # Store each TokenID as K-V (Token - Market Id)
             mongodb_poly_kv_store_client.set(new_market.tokenIds[0], new_market._id)
@@ -102,28 +96,21 @@ async def init_poly(mongodb_client, mongodb_poly_kv_store_client, arbitrage_hand
         else:
             print("Market exists already, updates only happen during WS connection")
 
-    all_token_ids = [market.tokenIds for market in list_markets]
+
+async def init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
+    list_markets = mongodb_client.read_all(COLLECTION_NAME)
+
+    all_token_ids = [market["tokenIds"] for market in list_markets]
     flattened_token_ids = [
         token_id for sublist in all_token_ids for token_id in sublist
     ]
 
     poly_ws_processor = PolyWSProcessor(
-        PolySubscriptionMessage({}, [], flattened_token_ids, "Market"),
-        collection_name,
+        [PolySubscriptionMessage({}, [], flattened_token_ids, "Market")],
+        COLLECTION_NAME,
         mongodb_client,
         mongodb_poly_kv_store_client,
         arbitrage_handler,
     )
 
-    await websocket_handler.open_ws_connection(
-        "wss://ws-subscriptions-clob.polymarket.com/ws/market", poly_ws_processor
-    )
-
-
-# def signal_handler(sig, frame):
-#     logging.info("Interrupt received, closing connection")
-#     sys.exit(0)
-
-# if __name__ == "__main__":
-#     signal.signal(signal.SIGINT, signal_handler)
-#     asyncio.run(init_poly())
+    await websocket_handler.open_ws_connection(WS_HOST, poly_ws_processor)

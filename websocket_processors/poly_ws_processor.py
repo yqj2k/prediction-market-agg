@@ -57,7 +57,7 @@ class PolyWSProcessor(WSProcessor):
         self.collection_name = collection_name
         self.arbitrage_handler = arbitrage_handler
 
-    def createSubcriptionMessage(self):
+    def createSubcriptionMessages(self):
         return self.subscription_message
 
     async def processMessage(self, message):
@@ -70,7 +70,7 @@ class PolyWSProcessor(WSProcessor):
 
             market_id = self.kv_client.get(asset_id)
             market = self.db_client.read(self.collection_name, {"_id": market_id})
-            if not (market_id == None and market == None):
+            if not (market_id is None and market is None):
                 index = 0 if market["tokenIds"][0] == asset_id else 1
 
                 if not market["prices"][index] == price_change_event.price:

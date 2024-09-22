@@ -1,17 +1,17 @@
 import json
 import logging
-import sys
 import websockets
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 async def subscribe(ws, processor):
-    subscribe_msg = processor.createSubcriptionMessage()
+    subscribe_msgs = processor.createSubcriptionMessages()
 
     # Send the subscription message
-    await ws.send(json.dumps(subscribe_msg.__dict__))
-    logging.info("Sent subscription message: %s", subscribe_msg.__dict__)
+    for subscription_msg in subscribe_msgs:
+        await ws.send(json.dumps(subscription_msg.__dict__))
+        logging.info("Sent subscription message: %s", subscription_msg.__dict__)
 
 async def listen(ws, processor):
     try:
