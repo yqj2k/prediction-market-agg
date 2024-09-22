@@ -5,12 +5,12 @@ aggregating prediction market data for arbs n shhiii
 
 Create .env file with ATLAS_URI and DB_NAME
 `pip install -r requirements.txt`
-`python poly_scraper.py`    
+`python find_arbitrage.py`    
 
 
 ### to debug
 
-`python poly_scraper.py >> response.json`
+`python find_arbitrage.py >> response.json`
 
 ## Order of operations
 - Query markets endpoint. Markets contain the odds
