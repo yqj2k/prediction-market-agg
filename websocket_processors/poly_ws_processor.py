@@ -4,6 +4,7 @@ import json
 
 logging.basicConfig(level=logging.INFO)
 
+
 # SubscriptionMessage defines the structure of the subscription request
 class PolySubscriptionMessage:
     def __init__(self, auth, markets, assets_ids, message_type):
@@ -11,6 +12,7 @@ class PolySubscriptionMessage:
         self.markets = markets
         self.assets_ids = assets_ids
         self.type = message_type
+
 
 # PriceChangeEvent defines the structure for a price change event message
 class PriceChangeEvent:
@@ -23,47 +25,59 @@ class PriceChangeEvent:
         self.side = side
         self.timestamp = timestamp
 
+
 def handle_price_change(event):
-    logging.info(event)
+    # logging.info(event)
     price_change_event = PriceChangeEvent(
-        event['event_type'],
-        event['asset_id'],
-        event['market'],
-        event['price'],
-        event['size'],
-        event['side'],
-        event['timestamp']
+        event["event_type"],
+        event["asset_id"],
+        event["market"],
+        event["price"],
+        event["size"],
+        event["side"],
+        event["timestamp"],
     )
-    logging.info("Price change detected: assetID: %s, New Price: %s, Time: %s",
-                 price_change_event.asset_id, price_change_event.price, price_change_event.timestamp)
+    # logging.info("Price change detected: assetID: %s, New Price: %s, Time: %s",
+    #              price_change_event.asset_id, price_change_event.price, price_change_event.timestamp)
     return price_change_event
 
+
 class PolyWSProcessor(WSProcessor):
-    def __init__(self, subscription_message, collection_name, db_client, kv_client):
+    def __init__(
+        self,
+        subscription_message,
+        collection_name,
+        db_client,
+        kv_client,
+        arbitrage_handler,
+    ):
         self.subscription_message = subscription_message
         self.db_client = db_client
         self.kv_client = kv_client
         self.collection_name = collection_name
+        self.arbitrage_handler = arbitrage_handler
 
     def createSubcriptionMessage(self):
         return self.subscription_message
-    
+
     async def processMessage(self, message):
         event = json.loads(message)
         event_type = event.get("event_type")
-        
+
         if event_type == "price_change":
             price_change_event = handle_price_change(event)
             asset_id = price_change_event.asset_id
-            
+
             market_id = self.kv_client.get(asset_id)
-            market = self.db_client.read(self.collection_name, {"_id":market_id})
+            market = self.db_client.read(self.collection_name, {"_id": market_id})
             if not (market_id == None and market == None):
-                index = 0 if market['tokenIds'][0] == asset_id else 1
-                
+                index = 0 if market["tokenIds"][0] == asset_id else 1
+
                 if not market["prices"][index] == price_change_event.price:
                     market["prices"][index] = price_change_event.price
                     new_prices = market["prices"]
-                    self.db_client.update(self.collection_name, {"_id": market_id}, {"prices": new_prices})
-        else:
-            logging.warning(f"Unhandled event type: {event_type}")
+                    self.db_client.update(
+                        self.collection_name, {"_id": market_id}, {"prices": new_prices}
+                    )
+                    self.arbitrage_handler.handle("polymarket", market)
+                    # logging.info("Price change detected: assetID: %s, New Price: %s, Time: %s", price_change_event.asset_id, price_change_event.price, price_change_event.timestamp)
