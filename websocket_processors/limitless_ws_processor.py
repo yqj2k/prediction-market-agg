@@ -2,6 +2,7 @@ import requests
 import asyncio
 from mongo_db_clients import mongodb_client
 from dotenv import load_dotenv, dotenv_values
+from datetime import datetime
 
 config = dotenv_values(".env")
 
@@ -31,6 +32,11 @@ class FeedEvent:
         self.amount = event["data"]["tradeAmount"]
         self.tradeAmountUSD = event["data"]["tradeAmountUSD"]
 
+    def __repr__(self):
+        return f"""Event type: {self.event_type}, Timestamp: {self.timestamp}, 
+        Title: {self.title}, Address: {self.address}, Strategy: {self.strategy}, 
+        Outcome: {self.outcome}, Contracts: {self.contracts}, Symbol: {self.symbol},
+        Amount: {self.amount}, AmountUSD: {self.tradeAmountUSD}"""
 
 
 def process_feed(event):
@@ -38,7 +44,7 @@ def process_feed(event):
     # find event in db, then update the prices of that event
     query = {"address": event.address}
     existing_market = mongodb_client.read(COLLECTION_NAME, query)
-    if not (existing_market is None):
+    if existing_market is not None:
         new_price = event.amount / event.contracts
         if event.outcome == "YES":
             prices = [new_price, 1 - new_price]
@@ -50,9 +56,11 @@ def process_feed(event):
             print("outcome for this event is malformed, skipping event: " + event.title)
         pass
     else:
+        print("Last feed processed: " + str(event))
         print("We shouldn't be updating a market we haven't processed yet")
 
 def store_last_timestamp(timestamp):
+    print("Storing last timestamp")
     query = {"_id": "last_feed_call"}
     document = {"_id": "last_feed_call", "value": timestamp} 
     last_called_feed = mongodb_client.read(last_feed_collection, query)
@@ -60,9 +68,23 @@ def store_last_timestamp(timestamp):
         mongodb_client.create(last_feed_collection, document)
     else:
         mongodb_client.update(last_feed_collection, query, document)
-    
-    mongodb_client.close()
 
+def get_last_timestamp():
+    query = {"_id": "last_feed_call"}
+    res = mongodb_client.read(last_feed_collection, query)
+    if not res == None:
+        return res["value"]
+    else:
+        return None
+    
+def compareFeedTimes(cachedFeed, currFeed):
+    if cachedFeed == None:
+        return False
+    print("T1: " + str(cachedFeed[:-1]))
+    print("T2: "+ str(currFeed[:-1]))
+    formatted_t1 = datetime.fromisoformat(cachedFeed[:-1])
+    formatted_t2 = datetime.fromisoformat(currFeed[:-1])
+    return formatted_t1 > formatted_t2
 
 async def scrape_limitless_feed():
     while True:
@@ -79,13 +101,19 @@ async def scrape_limitless_feed():
             print("No data extracted, gonna skip this")
             return
         
+        last_scraped_timestamp = get_last_timestamp()
         most_recent_timestamp = feed[0]["timestamp"]
-        for idx in range(len(feed)):
+        processedFeedAlready = compareFeedTimes(last_scraped_timestamp, most_recent_timestamp)
+        if processedFeedAlready:
+            print("No new feed to scrape, waiting then reset")
+            asyncio.sleep(60)
+            return
+        
+        for idx in range(len(feed) - 1, -1, -1):
             curr_event = feed[idx]
             if curr_event["eventType"] != "NEW_TRADE":
                 continue
-            event = FeedEvent(curr_event)
-            process_feed(event)
+            process_feed(curr_event)
 
         store_last_timestamp(most_recent_timestamp)
         print("Done scraping limitless feed")
