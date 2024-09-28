@@ -15,7 +15,7 @@ COLLECTION_NAME = "limitless_events"
 class Market:
     def __init__(self, market):
         # print("individual market: " + str(market))
-        self.address = market["address"]
+        self._id = market["address"]
         self.question = market["title"]
         self.created_date = market["createdAt"]
         if "deadline" in market:
@@ -57,7 +57,7 @@ def init_limitless(mongodb_client):
         new_market = Market(market)
 
         # find if document exists in collection, otherwise push it
-        query = {"address": new_market.address}
+        query = {"_id": new_market._id}
         existing_market = mongodb_client.read(COLLECTION_NAME, query)
 
         if existing_market is None:

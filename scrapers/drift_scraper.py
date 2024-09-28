@@ -35,17 +35,13 @@ def init_drift(mongodb_client):
 
         query = {"_id": market_name}
         existing_market = mongodb_client.read(COLLECTION_NAME, query)
-        if existing_market is None:
+        if existing_market is None and len(data["asks"]) > 0 and len(data["bids"]) > 0 :
             yes_price = int(data["asks"][0]["price"]) / MAX_PRICE
             no_price = 1 - (int(data["bids"][0]["price"]) / MAX_PRICE)
-            new_market_entry = {
-                    "_id": market_name,
-                    "question": HARDCODED_MARKETS_MAP[market_name],
-                    "prices": [format(yes_price, ".2f"), format(no_price, ".2f")],
-                }
+            new_market_entry = Market(market_name, HARDCODED_MARKETS_MAP[market_name], [format(yes_price, ".2f"), format(no_price, ".2f")])
             mongodb_client.create(
                 COLLECTION_NAME,
-                new_market_entry,
+                new_market_entry.__dict__,
             )
             new_market_list.append(new_market_entry)
     return new_market_list
