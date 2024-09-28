@@ -13,7 +13,7 @@ POST = "POST"
 DELETE = "DELETE"
 PUT = "PUT"
 
-HOST = "https://gamma-api.polymarket.com/markets?slug=will-a-democrat-win-michigan-presidential-election"
+HOST = "https://gamma-api.polymarket.com/markets?active=true&limit=50"
 WS_HOST = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 COLLECTION_NAME = "polymarket_events"
 
@@ -31,9 +31,6 @@ COLLECTION_NAME = "polymarket_events"
 
 class Market:
     def __init__(self, market, events):
-        # def __init__(self, id, question, created_date, end_date, liquidity, outcomes, prices, volume):
-        # check_correct_values(id, question, created_date, end_date, liquidity, outcomes, prices, volume)
-        # print("individual market: " + str(market))
         self._id = market["id"]
         self.question = market["question"]
         self.event_id = market["events"][0]["id"]
@@ -51,15 +48,19 @@ class Market:
             self.liquidity = "0"
         self.outcomes = json.loads(market["outcomes"])
         self.prices = json.loads(market["outcomePrices"])
-        self.volume = market["volume"]
+        if "volume" in market:
+            self.volume = market["volume"]
+        else:
+            print("This market is missing volume: " + market["id"])
+            self.volume = "0"
         self.tokenIds = json.loads(market["clobTokenIds"])
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n"
 
 
-def init_poly(mongodb_client, mongodb_poly_kv_store_client):
-    resp = requests.request(GET, HOST)
+def init_poly(offset, mongodb_client, mongodb_poly_kv_store_client):
+    resp = requests.request(GET, HOST + f"&offset={offset}")
     if resp.status_code != 200:
         print("Request to gamma API erroring out, stopping execution")
         return
