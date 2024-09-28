@@ -53,6 +53,7 @@ class Market:
         self.prices = json.loads(market["outcomePrices"])
         self.volume = market["volume"]
         self.tokenIds = json.loads(market["clobTokenIds"])
+        self.platform = "poly"
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n"
@@ -66,7 +67,7 @@ def init_poly(mongodb_client, mongodb_poly_kv_store_client):
 
     markets = resp.json()
 
-    list_markets = []
+    new_market_list = []
     for market in markets:
         m_event = market["events"]
 
@@ -79,23 +80,20 @@ def init_poly(mongodb_client, mongodb_poly_kv_store_client):
             continue
 
         new_market = Market(market, m_event)
-        list_markets.append(new_market)
 
         # find if document exists in collection, otherwise push it
         query = {"_id": new_market._id}
         existing_market = mongodb_client.read(COLLECTION_NAME, query)
 
         if existing_market is None:
-            res = mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
+            mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
 
             # Store each TokenID as K-V (Token - Market Id)
             mongodb_poly_kv_store_client.set(new_market.tokenIds[0], new_market._id)
             mongodb_poly_kv_store_client.set(new_market.tokenIds[1], new_market._id)
 
-            print("Inserted document id: " + str(res))
-        else:
-            print("Market exists already, updates only happen during WS connection")
-
+            new_market_list.append(new_market)
+    return new_market_list
 
 async def init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
     list_markets = mongodb_client.read_all(COLLECTION_NAME)

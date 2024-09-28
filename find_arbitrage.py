@@ -1,7 +1,7 @@
 import asyncio
 from arbitrage_handler import ArbitrageHandler
-from mongodb_client import MongoDBClient
-from mongodb_kv_store_client import MongoDBKVStore
+from mongo_db_clients.mongodb_client import MongoDBClient
+from mongo_db_clients.mongodb_kv_store_client import MongoDBKVStore
 from scrapers.drift_scraper import init_drift, init_drift_ws
 from scrapers.poly_scraper import init_poly, init_poly_ws
 from scrapers.limitless_scraper import init_limitless

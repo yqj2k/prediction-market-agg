@@ -1,12 +1,6 @@
 import requests
 import json
 
-import websocket_handler
-from websocket_processors.limitless_ws_processor import (
-    LimitlessWSProcessor
-)
-
-
 GET = "GET"
 POST = "POST"
 DELETE = "DELETE"
@@ -22,7 +16,7 @@ class Market:
     def __init__(self, market):
         # print("individual market: " + str(market))
         self.address = market["address"]
-        self.title = market["title"]
+        self.question = market["title"]
         self.created_date = market["createdAt"]
         if "deadline" in market:
             self.end_date = market["deadline"]
@@ -34,6 +28,7 @@ class Market:
         self.collateralAsset = market["collateralToken"]["symbol"]
         self.outcomes = ["Yes", "No"]
         self.prices = None
+        self.platform = "limitless"
 
 
     def __repr__(self):
@@ -46,11 +41,10 @@ def init_limitless(mongodb_client):
         print("Request to limitless API erroring out, stopping execution")
         return
 
-    markets = resp.json()
+    markets = resp.json()["data"]
 
-    list_markets = []
+    new_market_list = []
     for market in markets:
-        print(market)
         m_event = market['markets'] if 'markets' in market else []
 
         if len(m_event) > 1:
@@ -61,22 +55,20 @@ def init_limitless(mongodb_client):
             continue
 
         new_market = Market(market)
-        list_markets.append(new_market)
 
         # find if document exists in collection, otherwise push it
         query = {"address": new_market.address}
         existing_market = mongodb_client.read(COLLECTION_NAME, query)
 
         if existing_market is None:
-            res = mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
+            mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
 
             # Store each TokenID as K-V (Token - Market Id)
             # mongodb_poly_kv_store_client.set(new_market.tokenIds[0], new_market._id)
             # mongodb_poly_kv_store_client.set(new_market.tokenIds[1], new_market._id)
+            new_market_list.append(new_market)
 
-            print("Inserted document id: " + str(res))
-        else:
-            print("Market exists already, updates only happen during WS/feed connection")
+    return new_market_list
 
 
 # async def init_limitless_ws(mongodb_client, arbitrage_handler):
