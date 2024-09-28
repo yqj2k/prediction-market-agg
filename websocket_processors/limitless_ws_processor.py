@@ -1,5 +1,4 @@
 from websocket_processors.ws_processor import WSProcessor
-import logging
 import json
 
 class PriceChangeEvent:

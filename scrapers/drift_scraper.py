@@ -16,8 +16,15 @@ COLLECTION_NAME = "drift_events"
 # drift events
 # YES price = first ask price /  1000000
 # NO price = 1 - (first bid price /  1000000)
+class Market:
+    def __init__(self, _id, question, prices):
+        self._id = _id
+        self.question = question
+        self.prices = prices
+        self.platform = "drift"
 
 def init_drift(mongodb_client):
+    new_market_list = []
     for market_name in HARDCODED_MARKETS_NAMES:
         resp = requests.request(GET, HOST + market_name)
         if resp.status_code != 200:
@@ -36,6 +43,8 @@ def init_drift(mongodb_client):
                 COLLECTION_NAME,
                 new_market_entry.__dict__,
             )
+            new_market_list.append(new_market_entry)
+    return new_market_list
 
 async def init_drift_ws(mongodb_client, arbitrage_handler):
     subscription_msgs = []

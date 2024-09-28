@@ -33,6 +33,7 @@ class Market:
         self.collateralAsset = market["collateralToken"]["symbol"]
         self.outcomes = ["Yes", "No"]
         self.prices = None
+        self.platform = "limitless"
 
     def __repr__(self):
         return f"Market address:{self.address}, title: {self.title}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, volume: {self.volume} \n"
@@ -44,9 +45,9 @@ def init_limitless(mongodb_client):
         print("Request to limitless API erroring out, stopping execution")
         return
 
-    markets = resp.json()
+    markets = resp.json()["data"]
 
-    list_markets = []
+    new_market_list = []
     for market in markets:
         res_markets = market["markets"] if "markets" in market else [market]
 
