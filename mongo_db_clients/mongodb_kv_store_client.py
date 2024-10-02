@@ -1,4 +1,4 @@
-from mongodb_client import MongoDBClient
+from mongo_db_clients.mongodb_client import MongoDBClient
 
 class MongoDBKVStore:
     def __init__(self, uri, db_name, collection_name="kv_store"):
