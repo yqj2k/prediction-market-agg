@@ -53,7 +53,11 @@ class Market:
         else:
             print("This market is missing volume: " + market["id"])
             self.volume = "0"
-        self.tokenIds = json.loads(market["clobTokenIds"])
+        if "clobTokenIds" in market:
+            self.tokenIds = json.loads(market["clobTokenIds"])
+        else:
+            print("This market is missing clobTokenIds: " + market["clobTokenIds"])
+            self.tokenIds =[]
         self.platform = "poly"
 
     def __repr__(self):

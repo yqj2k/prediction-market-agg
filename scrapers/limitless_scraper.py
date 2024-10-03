@@ -56,17 +56,17 @@ def init_limitless(mongodb_client):
                 map(
                     lambda x: {
                         **x,
+                        "title": f"{market["title"]} {x["title"]}",
                         "collateralToken": market["collateralToken"],
                         "deadline": market["deadline"],
                     },
                     res_markets,
                 )
             )
-            continue
 
         for res_market in res_markets:
             new_market = Market(res_market)
-            list_markets.append(new_market)
+           
 
             # find if document exists in collection, otherwise push it
             query = {"_id": new_market._id}
@@ -78,12 +78,10 @@ def init_limitless(mongodb_client):
                 # Store each TokenID as K-V (Token - Market Id)
                 # mongodb_poly_kv_store_client.set(new_market.tokenIds[0], new_market._id)
                 # mongodb_poly_kv_store_client.set(new_market.tokenIds[1], new_market._id)
-
+                
+                new_market_list.append(new_market)
                 print("Inserted document id: " + str(res))
-            else:
-                print(
-                    "Market exists already, updates only happen during WS/feed connection"
-                )
+    return new_market_list
 
 
 # async def init_limitless_ws(mongodb_client, arbitrage_handler):

@@ -17,7 +17,7 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 logging.basicConfig(level=logging.INFO)
 
 
-def match_markets(new_markets, unmatched_markets, mongodb_client, threshold=0.8):
+def match_markets(new_markets, unmatched_markets, unmatched_markets_id_to_idx, mongodb_client, threshold=0.80):
     all_markets = list(map(vars, new_markets)) + unmatched_markets
 
     # Convert event names to a list
@@ -41,6 +41,13 @@ def match_markets(new_markets, unmatched_markets, mongodb_client, threshold=0.8)
             ):
                 platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
                 platforms.sort()
+                
+                if all_markets[i]["_id"] in unmatched_markets_id_to_idx:
+                    unmatched_markets.pop(unmatched_markets_id_to_idx.get(all_markets[i]["_id"]))
+                    unmatched_markets_id_to_idx.pop(all_markets[i]["_id"])
+                if all_markets[j]["_id"] in unmatched_markets_id_to_idx:
+                    unmatched_markets.pop(unmatched_markets_id_to_idx.get(all_markets[j]["_id"]))
+                    unmatched_markets_id_to_idx.pop(all_markets[j]["_id"])
 
                 mongodb_client.create(
                     f"{platforms[0]}_{platforms[1]}_map",
@@ -56,13 +63,11 @@ def match_markets(new_markets, unmatched_markets, mongodb_client, threshold=0.8)
                 )
                 matched_indices.update([i, j])
 
-    # Store unmatched events
     for idx, market in enumerate(all_markets):
-        if idx not in matched_indices:
+        if idx not in matched_indices and market["_id"] not in unmatched_markets_id_to_idx:
             unmatched_markets.append(market)
-            mongodb_client.create("unmatched_markets", market)
-
-
+            unmatched_markets_id_to_idx[market["_id"]] = len(unmatched_markets) - 1
+            
 if __name__ == "__main__":
     mongodb_client = MongoDBClient(config["ATLAS_URI"], config["DB_NAME"])
     mongodb_poly_kv_store_client = MongoDBKVStore(
@@ -70,6 +75,7 @@ if __name__ == "__main__":
     )
 
     unmatched_markets = mongodb_client.read_all("unmatched_markets")
+    unmatched_markets_id_to_idx = {getattr(obj, "_id"): idx for idx, obj in enumerate(unmatched_markets)}
 
     offset = 0
     while True:
@@ -85,5 +91,9 @@ if __name__ == "__main__":
         if len(new_markets) == 0:
             break
         else:
-            match_markets(new_markets, unmatched_markets, mongodb_client)
+            match_markets(new_markets, unmatched_markets, unmatched_markets_id_to_idx, mongodb_client)
             continue
+    
+    for market in unmatched_markets:
+        mongodb_client.create("unmatched_markets", market)
+    
