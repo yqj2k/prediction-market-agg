@@ -16,20 +16,28 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 logging.basicConfig(level=logging.INFO)
 
+embedding_cache = {}
+
+def get_embedding(event_name):
+    if event_name not in embedding_cache:
+        # Compute embedding and store it in the cache
+        embedding_cache[event_name] = model.encode(event_name, show_progress_bar=False)
+    return embedding_cache[event_name]
 
 def match_markets(new_markets, unmatched_markets, unmatched_markets_id_to_idx, mongodb_client, threshold=0.80):
     all_markets = list(map(vars, new_markets)) + unmatched_markets
 
-    # Convert event names to a list
+    # Convert market qeustions to a list
     market_questions = [market["question"] for market in all_markets]
 
-    # Generate embeddings for event names
-    embeddings = model.encode(market_questions, convert_to_tensor=True)
+    # Generate embeddings for market questions
+    embeddings = [get_embedding(question) for question in market_questions]
 
     # Compute cosine similarities between embeddings
     cosine_similarities = cosine_similarity(embeddings)
 
     matched_indices = set()
+    to_remove_from_unmatched_markets_indices = set()
 
     # Finding pairs above the threshold
     for i in range(len(all_markets)):
@@ -42,12 +50,11 @@ def match_markets(new_markets, unmatched_markets, unmatched_markets_id_to_idx, m
                 platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
                 platforms.sort()
                 
+                # if matched markets were from unmatched_markets list, mark them for removal
                 if all_markets[i]["_id"] in unmatched_markets_id_to_idx:
-                    unmatched_markets.pop(unmatched_markets_id_to_idx.get(all_markets[i]["_id"]))
-                    unmatched_markets_id_to_idx.pop(all_markets[i]["_id"])
+                    to_remove_from_unmatched_markets_indices.update([unmatched_markets_id_to_idx.get(all_markets[i]["_id"])])
                 if all_markets[j]["_id"] in unmatched_markets_id_to_idx:
-                    unmatched_markets.pop(unmatched_markets_id_to_idx.get(all_markets[j]["_id"]))
-                    unmatched_markets_id_to_idx.pop(all_markets[j]["_id"])
+                    to_remove_from_unmatched_markets_indices.update([unmatched_markets_id_to_idx.get(all_markets[j]["_id"])])
 
                 mongodb_client.create(
                     f"{platforms[0]}_{platforms[1]}_map",
@@ -62,7 +69,20 @@ def match_markets(new_markets, unmatched_markets, unmatched_markets_id_to_idx, m
                     all_markets[j]["question"],
                 )
                 matched_indices.update([i, j])
-
+                
+    new_unmatched_markets = []
+    unmatched_markets_id_to_idx.clear()
+    
+    # Clear out markets that have been matched in unmatched_markets list
+    for idx, market in enumerate(unmatched_markets):
+        if idx not in to_remove_from_unmatched_markets_indices:
+            new_unmatched_markets.append(market)
+            unmatched_markets_id_to_idx[market["_id"]] = len(new_unmatched_markets) - 1
+    
+    unmatched_markets.clear()
+    unmatched_markets.extend(new_unmatched_markets)
+    
+    # Add rest of unmatched markets to unmatched_markets list
     for idx, market in enumerate(all_markets):
         if idx not in matched_indices and market["_id"] not in unmatched_markets_id_to_idx:
             unmatched_markets.append(market)
