@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 
 embedding_cache = {}
 
+PLATFORMS = set(("drift", "poly", "limitless"))
+
 
 def get_embedding(event_name):
     if event_name not in embedding_cache:
@@ -33,7 +35,7 @@ def match_markets(
     unmatched_markets,
     unmatched_markets_id_to_idx,
     mongodb_client,
-    threshold=0.80,
+    threshold=0.83,
 ):
     all_markets = list(map(vars, new_markets)) + unmatched_markets
 
@@ -45,51 +47,73 @@ def match_markets(
 
     # Compute cosine similarities between embeddings
     cosine_similarities = cosine_similarity(embeddings)
+    
+    best_matches = {}
 
-    matched_indices = set()
-    to_remove_from_unmatched_markets_indices = set()
-
-    # Finding pairs above the threshold
+    # Finding the best pairs above the threshold
     for i in range(len(all_markets)):
         for j in range(i + 1, len(all_markets)):
-            # Only consider matching events from different sites
+            # Only consider matching events from different platforms
             if (
                 all_markets[i]["platform"] != all_markets[j]["platform"]
                 and cosine_similarities[i, j] >= threshold
             ):
-                platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
-                platforms.sort()
+                # Keep track of the best match for market i
+                if i not in best_matches or cosine_similarities[i, j] > best_matches[i][1]:
+                    best_matches[i] = (j, cosine_similarities[i, j])
 
-                # if matched markets were from unmatched_markets list, mark them for removal
-                if all_markets[i]["_id"] in unmatched_markets_id_to_idx:
-                    to_remove_from_unmatched_markets_indices.update(
-                        [unmatched_markets_id_to_idx.get(all_markets[i]["_id"])]
-                    )
-                if all_markets[j]["_id"] in unmatched_markets_id_to_idx:
-                    to_remove_from_unmatched_markets_indices.update(
-                        [unmatched_markets_id_to_idx.get(all_markets[j]["_id"])]
+                # Keep track of the best match for market j
+                if j not in best_matches or cosine_similarities[i, j] > best_matches[j][1]:
+                    best_matches[j] = (i, cosine_similarities[i, j])
+
+    matched_indices = set()
+
+    # Finding pairs above the threshold
+    for i, (j, similarity) in best_matches.items():
+        if i in matched_indices or j in matched_indices:
+            continue  
+
+        platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
+        platforms.sort()
+
+        # Update unmatched markets' unmatched platforms list
+        for market in (all_markets[i], all_markets[j]):
+            if market["_id"] in unmatched_markets_id_to_idx:
+                unmatched_idx = unmatched_markets_id_to_idx[market["_id"]]
+                unmatched_market = unmatched_markets[unmatched_idx]
+                if (
+                    all_markets[j if market == all_markets[i] else i][
+                        "platform"
+                    ]
+                    in unmatched_market["unmatched_platforms"]
+                ):
+                    unmatched_market["unmatched_platforms"].remove(
+                        all_markets[j if market == all_markets[i] else i][
+                            "platform"
+                        ]
                     )
 
-                mongodb_client.create(
-                    f"{platforms[0]}_{platforms[1]}_map",
-                    {
-                        f"{all_markets[i]['platform']}_id": all_markets[i]["_id"],
-                        f"{all_markets[j]['platform']}_id": all_markets[j]["_id"],
-                    },
-                )
-                logging.info(
-                    "matched: %s and %s",
-                    all_markets[i]["question"],
-                    all_markets[j]["question"],
-                )
-                matched_indices.update([i, j])
+        mongodb_client.create(
+            f"{platforms[0]}_{platforms[1]}_map",
+            {
+                f"{all_markets[i]['platform']}_id": all_markets[i]["_id"],
+                f"{all_markets[j]['platform']}_id": all_markets[j]["_id"],
+            },
+        )
+        logging.info(
+            "matched: %s and %s with similarity %.2f",
+            all_markets[i]["question"],
+            all_markets[j]["question"],
+            similarity
+        )
+        matched_indices.update([i, j])
 
     new_unmatched_markets = []
     unmatched_markets_id_to_idx.clear()
 
     # Clear out markets that have been matched in unmatched_markets list
     for idx, market in enumerate(unmatched_markets):
-        if idx not in to_remove_from_unmatched_markets_indices:
+        if len(market["unmatched_platforms"]) > 0:
             new_unmatched_markets.append(market)
             unmatched_markets_id_to_idx[market["_id"]] = len(new_unmatched_markets) - 1
 
@@ -102,9 +126,11 @@ def match_markets(
             idx not in matched_indices
             and market["_id"] not in unmatched_markets_id_to_idx
         ):
+            market["unmatched_platforms"] = [
+                p for p in PLATFORMS if p != market["platform"]
+            ]
             unmatched_markets.append(market)
             unmatched_markets_id_to_idx[market["_id"]] = len(unmatched_markets) - 1
-
 
 if __name__ == "__main__":
     # Set up argument parser
@@ -140,7 +166,10 @@ if __name__ == "__main__":
     page_num = 1
     while True:
         new_poly_markets = init_poly(
-            offset, mongodb_client, mongodb_poly_kv_store_client, start_date_min=start_date_min
+            offset,
+            mongodb_client,
+            mongodb_poly_kv_store_client,
+            start_date_min=start_date_min,
         )
         new_drift_markets = init_drift(mongodb_client)
         new_limitless_markets = init_limitless(page_num, mongodb_client)
