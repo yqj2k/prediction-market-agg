@@ -53,15 +53,24 @@ class Market:
         else:
             print("This market is missing volume: " + market["id"])
             self.volume = "0"
-        self.tokenIds = json.loads(market["clobTokenIds"])
+        if "clobTokenIds" in market:
+            self.tokenIds = json.loads(market["clobTokenIds"])
+        else:
+            print("This market is missing clobTokenIds: " + market["clobTokenIds"])
+            self.tokenIds =[]
         self.platform = "poly"
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n"
 
 
-def init_poly(offset, mongodb_client, mongodb_poly_kv_store_client):
-    resp = requests.request(GET, HOST + f"&offset={offset}")
+def init_poly(offset, mongodb_client, mongodb_poly_kv_store_client, start_date_min=None):
+    base_url = f"{HOST}&offset={offset}"
+    
+    if start_date_min:
+        base_url += f"&start_date_min={start_date_min.strftime("%Y-%m-%dT%H:%M:%S")}"
+        
+    resp = requests.request(GET, base_url)
     if resp.status_code != 200:
         print("Request to gamma API erroring out, stopping execution")
         return

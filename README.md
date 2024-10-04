@@ -7,6 +7,10 @@ Create .env file with ATLAS_URI and DB_NAME
 `pip install -r requirements.txt`
 `python find_arbitrage.py`    
 
+# run process new markets scripts locally
+`python process_new_markets.py` Parses all markets
+
+`python process_new_markets.py --start-date-min 2022-04-01T00:00:00`  Parses markets that started on and after the specified date
 
 ### to debug
 

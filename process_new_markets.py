@@ -6,7 +6,9 @@ from scrapers.poly_scraper import init_poly
 from dotenv import load_dotenv, dotenv_values
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
+from datetime import datetime
 import logging
+import argparse
 
 config = dotenv_values(".env")
 
@@ -16,66 +18,158 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 logging.basicConfig(level=logging.INFO)
 
+embedding_cache = {}
 
-def match_markets(new_markets, unmatched_markets, mongodb_client, threshold=0.8):
+PLATFORMS = set(("drift", "poly", "limitless"))
+
+
+def get_embedding(event_name):
+    if event_name not in embedding_cache:
+        # Compute embedding and store it in the cache
+        embedding_cache[event_name] = model.encode(event_name, show_progress_bar=False)
+    return embedding_cache[event_name]
+
+
+def match_markets(
+    new_markets,
+    unmatched_markets,
+    unmatched_markets_id_to_idx,
+    mongodb_client,
+    threshold=0.83,
+):
     all_markets = list(map(vars, new_markets)) + unmatched_markets
 
-    # Convert event names to a list
+    # Convert market qeustions to a list
     market_questions = [market["question"] for market in all_markets]
 
-    # Generate embeddings for event names
-    embeddings = model.encode(market_questions, convert_to_tensor=True)
+    # Generate embeddings for market questions
+    embeddings = [get_embedding(question) for question in market_questions]
 
     # Compute cosine similarities between embeddings
     cosine_similarities = cosine_similarity(embeddings)
+    
+    best_matches = {}
 
-    matched_indices = set()
-
-    # Finding pairs above the threshold
+    # Finding the best pairs above the threshold
     for i in range(len(all_markets)):
         for j in range(i + 1, len(all_markets)):
-            # Only consider matching events from different sites
+            # Only consider matching events from different platforms
             if (
                 all_markets[i]["platform"] != all_markets[j]["platform"]
                 and cosine_similarities[i, j] >= threshold
             ):
-                platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
-                platforms.sort()
+                # Keep track of the best match for market i
+                if i not in best_matches or cosine_similarities[i, j] > best_matches[i][1]:
+                    best_matches[i] = (j, cosine_similarities[i, j])
 
-                mongodb_client.create(
-                    f"{platforms[0]}_{platforms[1]}_map",
-                    {
-                        f"{all_markets[i]['platform']}_id": all_markets[i]["_id"],
-                        f"{all_markets[j]['platform']}_id": all_markets[j]["_id"],
-                    },
-                )
-                logging.info(
-                    "matched: %s and %s",
-                    all_markets[i]["question"],
-                    all_markets[j]["question"],
-                )
-                matched_indices.update([i, j])
+                # Keep track of the best match for market j
+                if j not in best_matches or cosine_similarities[i, j] > best_matches[j][1]:
+                    best_matches[j] = (i, cosine_similarities[i, j])
 
-    # Store unmatched events
+    matched_indices = set()
+
+    # Finding pairs above the threshold
+    for i, (j, similarity) in best_matches.items():
+        if i in matched_indices or j in matched_indices:
+            continue  
+
+        platforms = [all_markets[i]["platform"], all_markets[j]["platform"]]
+        platforms.sort()
+
+        # Update unmatched markets' unmatched platforms list
+        for market in (all_markets[i], all_markets[j]):
+            if market["_id"] in unmatched_markets_id_to_idx:
+                unmatched_idx = unmatched_markets_id_to_idx[market["_id"]]
+                unmatched_market = unmatched_markets[unmatched_idx]
+                if (
+                    all_markets[j if market == all_markets[i] else i][
+                        "platform"
+                    ]
+                    in unmatched_market["unmatched_platforms"]
+                ):
+                    unmatched_market["unmatched_platforms"].remove(
+                        all_markets[j if market == all_markets[i] else i][
+                            "platform"
+                        ]
+                    )
+
+        mongodb_client.create(
+            f"{platforms[0]}_{platforms[1]}_map",
+            {
+                f"{all_markets[i]['platform']}_id": all_markets[i]["_id"],
+                f"{all_markets[j]['platform']}_id": all_markets[j]["_id"],
+            },
+        )
+        logging.info(
+            "matched: %s and %s with similarity %.2f",
+            all_markets[i]["question"],
+            all_markets[j]["question"],
+            similarity
+        )
+        matched_indices.update([i, j])
+
+    new_unmatched_markets = []
+    unmatched_markets_id_to_idx.clear()
+
+    # Clear out markets that have been matched in unmatched_markets list
+    for idx, market in enumerate(unmatched_markets):
+        if len(market["unmatched_platforms"]) > 0:
+            new_unmatched_markets.append(market)
+            unmatched_markets_id_to_idx[market["_id"]] = len(new_unmatched_markets) - 1
+
+    unmatched_markets.clear()
+    unmatched_markets.extend(new_unmatched_markets)
+
+    # Add rest of unmatched markets to unmatched_markets list
     for idx, market in enumerate(all_markets):
-        if idx not in matched_indices:
+        if (
+            idx not in matched_indices
+            and market["_id"] not in unmatched_markets_id_to_idx
+        ):
+            market["unmatched_platforms"] = [
+                p for p in PLATFORMS if p != market["platform"]
+            ]
             unmatched_markets.append(market)
-            mongodb_client.create("unmatched_markets", market)
-
+            unmatched_markets_id_to_idx[market["_id"]] = len(unmatched_markets) - 1
 
 if __name__ == "__main__":
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Script for processing markets")
+    parser.add_argument(
+        "--start-date-min",
+        type=str,
+        help="Optional timestamp in ISO 8601 format (e.g., '2022-04-01T00:00:00')",
+    )
+    args = parser.parse_args()
+
+    # Parse the start_date_min argument if provided, or set it to None
+    start_date_min = args.start_date_min
+
+    # Optional: validate the timestamp format
+    if start_date_min:
+        try:
+            start_date_min = datetime.strptime(start_date_min, "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            raise ValueError("Timestamp format should be 'YYYY-MM-DDTHH:MM:SS'")
+
     mongodb_client = MongoDBClient(config["ATLAS_URI"], config["DB_NAME"])
     mongodb_poly_kv_store_client = MongoDBKVStore(
         config["ATLAS_URI"], config["DB_NAME"], "polymarket_kv_store"
     )
 
     unmatched_markets = mongodb_client.read_all("unmatched_markets")
+    unmatched_markets_id_to_idx = {
+        getattr(obj, "_id"): idx for idx, obj in enumerate(unmatched_markets)
+    }
 
     offset = 0
     page_num = 1
     while True:
         new_poly_markets = init_poly(
-            offset, mongodb_client, mongodb_poly_kv_store_client
+            offset,
+            mongodb_client,
+            mongodb_poly_kv_store_client,
+            start_date_min=start_date_min,
         )
         new_drift_markets = init_drift(mongodb_client)
         new_limitless_markets = init_limitless(page_num, mongodb_client)
@@ -86,5 +180,13 @@ if __name__ == "__main__":
         if len(new_markets) == 0:
             break
         else:
-            match_markets(new_markets, unmatched_markets, mongodb_client)
+            match_markets(
+                new_markets,
+                unmatched_markets,
+                unmatched_markets_id_to_idx,
+                mongodb_client,
+            )
             continue
+
+    for market in unmatched_markets:
+        mongodb_client.create("unmatched_markets", market)
