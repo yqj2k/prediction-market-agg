@@ -72,12 +72,13 @@ if __name__ == "__main__":
     unmatched_markets = mongodb_client.read_all("unmatched_markets")
 
     offset = 0
+    page_num = 1
     while True:
         new_poly_markets = init_poly(
             offset, mongodb_client, mongodb_poly_kv_store_client
         )
         new_drift_markets = init_drift(mongodb_client)
-        new_limitless_markets = init_limitless(mongodb_client)
+        new_limitless_markets = init_limitless(page_num, mongodb_client)
 
         new_markets = new_poly_markets + new_drift_markets + new_limitless_markets
 
