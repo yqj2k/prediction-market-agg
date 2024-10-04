@@ -11,7 +11,6 @@ DELETE = "DELETE"
 PUT = "PUT"
 
 HOST = "https://api.limitless.exchange/markets/active"
-WS_HOST = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 COLLECTION_NAME = "limitless_events"
 
 # for betting URL, limitless.exchange/markets/{address}
@@ -39,13 +38,13 @@ class Market:
         return f"Market address:{self.address}, title: {self.title}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, volume: {self.volume} \n"
 
 
-def init_limitless(mongodb_client):
-    resp = requests.request(GET, HOST)
+def init_limitless(page_num, mongodb_client):
+    paged_req = HOST + f"?page={page_num}"
+    resp = requests.request(GET, paged_req)
     if resp.status_code != 200:
         print("Request to limitless API erroring out, stopping execution")
         return
-
-    markets = resp.json()["data"]
+    markets = resp.json()['data']
 
     new_market_list = []
     for market in markets:
@@ -66,38 +65,12 @@ def init_limitless(mongodb_client):
 
         for res_market in res_markets:
             new_market = Market(res_market)
-           
-
+        
             # find if document exists in collection, otherwise push it
             query = {"_id": new_market._id}
             existing_market = mongodb_client.read(COLLECTION_NAME, query)
 
             if existing_market is None:
-                res = mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
-
-                # Store each TokenID as K-V (Token - Market Id)
-                # mongodb_poly_kv_store_client.set(new_market.tokenIds[0], new_market._id)
-                # mongodb_poly_kv_store_client.set(new_market.tokenIds[1], new_market._id)
-                
+                mongodb_client.create(COLLECTION_NAME, new_market.__dict__)
                 new_market_list.append(new_market)
-                print("Inserted document id: " + str(res))
     return new_market_list
-
-
-# async def init_limitless_ws(mongodb_client, arbitrage_handler):
-#     list_markets = mongodb_client.read_all(COLLECTION_NAME)
-
-#     all_addresses = [market["tokenIds"] for market in list_markets]
-#     flattened_token_ids = [
-#         token_id for sublist in all_token_ids for token_id in sublist
-#     ]
-
-#     poly_ws_processor = PolyWSProcessor(
-#         [PolySubscriptionMessage({}, [], flattened_token_ids, "Market")],
-#         COLLECTION_NAME,
-#         mongodb_client,
-#         mongodb_poly_kv_store_client,
-#         arbitrage_handler,
-#     )
-
-#     await websocket_handler.open_ws_connection(WS_HOST, poly_ws_processor)

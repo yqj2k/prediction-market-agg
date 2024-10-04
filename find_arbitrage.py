@@ -5,6 +5,7 @@ from mongo_db_clients.mongodb_kv_store_client import MongoDBKVStore
 from scrapers.drift_scraper import init_drift, init_drift_ws
 from scrapers.poly_scraper import init_poly, init_poly_ws
 from scrapers.limitless_scraper import init_limitless
+from websocket_processors.limitless_ws_processor import scrape_limitless_feed
 import signal
 import logging
 import sys
@@ -22,8 +23,9 @@ def signal_handler(sig, frame):
 async def run_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
     # Schedule three calls *concurrently*:
     await asyncio.gather(
-     init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
-        init_drift_ws(mongodb_client, arbitrage_handler)
+        init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
+        init_drift_ws(mongodb_client, arbitrage_handler),
+        scrape_limitless_feed()
     )
 
 if __name__ == "__main__":
