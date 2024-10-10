@@ -22,6 +22,11 @@ class MongoDBClient:
         collection = self.db[collection_name]
         documents = collection.find()
         return list(documents)
+    
+    def read_all_with_query(self, collection_name, query):
+        collection = self.db[collection_name]
+        documents = collection.find(query)
+        return list(documents)
 
     def update(self, collection_name, query, new_values):
         collection = self.db[collection_name]

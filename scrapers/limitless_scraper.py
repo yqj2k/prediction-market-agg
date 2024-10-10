@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime
 
 GET = "GET"
 POST = "POST"
@@ -16,12 +17,12 @@ class Market:
         # print("individual market: " + str(market))
         self._id = market["address"]
         self.question = market["title"]
-        self.created_date = market["createdAt"]
+        self.created_date = datetime.strptime(market["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ") 
         if "deadline" in market:
-            self.end_date = market["deadline"]
+            self.end_date = datetime.strptime(market["deadline"], "%Y-%m-%dT%H:%M:%S.%fZ") 
         else:
             print("This market is missing a deadline: " + market["address"])
-            self.end_date = "2025-12-31T12:00:00Z"
+            self.end_date = datetime.strptime("2024-10-05T12:00:00.000Z", "%Y-%m-%dT%H:%M:%S.%fZ") 
         self.liquidity = market["liquidityFormatted"]
         self.volume = market["volumeFormatted"]
         self.collateralAsset = market["collateralToken"]["symbol"]

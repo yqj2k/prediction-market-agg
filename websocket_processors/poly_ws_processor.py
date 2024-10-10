@@ -79,5 +79,4 @@ class PolyWSProcessor(WSProcessor):
                     self.db_client.update(
                         self.collection_name, {"_id": market_id}, {"prices": new_prices}
                     )
-                    self.arbitrage_handler.handle("polymarket", market)
-                    # logging.info("Price change detected: assetID: %s, New Price: %s, Time: %s", price_change_event.asset_id, price_change_event.price, price_change_event.timestamp)
+                    self.arbitrage_handler.handle("poly", market)

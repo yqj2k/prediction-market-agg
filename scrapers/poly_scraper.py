@@ -1,6 +1,7 @@
 import requests
 import json
-
+from datetime import datetime
+from constants.global_constants import PLATFORMS
 import websocket_handler
 from websocket_processors.poly_ws_processor import (
     PolySubscriptionMessage,
@@ -13,9 +14,9 @@ POST = "POST"
 DELETE = "DELETE"
 PUT = "PUT"
 
-HOST = "https://gamma-api.polymarket.com/markets?active=true&limit=50"
+HOST = "https://gamma-api.polymarket.com/markets?active=true&limit=50&order=slug"
 WS_HOST = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
-COLLECTION_NAME = "polymarket_events"
+COLLECTION_NAME = "poly_events"
 
 
 # task
@@ -36,12 +37,16 @@ class Market:
         self.event_id = market["events"][0]["id"]
         self.description = events[0]["title"]
         self.slug = events[0]["slug"]
-        self.created_date = market["createdAt"]
+        self.created_date = datetime.strptime(
+            market["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
         if "endDate" in market:
-            self.end_date = market["endDate"]
+            self.end_date = datetime.strptime(market["endDate"], "%Y-%m-%dT%H:%M:%SZ")
         else:
             print("This market is missing an end date: " + market["id"])
-            self.end_date = "2025-12-31T12:00:00Z"
+            self.end_date = datetime.strptime(
+                "2024-10-05T12:00:00Z", "%Y-%m-%dT%H:%M:%SZ"
+            )
         if "liquidity" in market:
             self.liquidity = market["liquidity"]
         else:
@@ -57,19 +62,21 @@ class Market:
             self.tokenIds = json.loads(market["clobTokenIds"])
         else:
             print("This market is missing clobTokenIds: " + market["clobTokenIds"])
-            self.tokenIds =[]
+            self.tokenIds = []
         self.platform = "poly"
 
     def __repr__(self):
         return f"Market id:{self.id}, event id: {self.event_id}, description: {self.description}, slug: {self.slug}, createdAt: {self.created_date}, endDate: {self.end_date}, liquidity: {self.liquidity}, outcomes: {self.outcomes}, prices: {self.prices}, volume: {self.volume} \n"
 
 
-def init_poly(offset, mongodb_client, mongodb_poly_kv_store_client, start_date_min=None):
+def init_poly(
+    offset, mongodb_client, mongodb_poly_kv_store_client, start_date_min=None
+):
     base_url = f"{HOST}&offset={offset}"
-    
+
     if start_date_min:
         base_url += f"&start_date_min={start_date_min.strftime("%Y-%m-%dT%H:%M:%S")}"
-        
+
     resp = requests.request(GET, base_url)
     if resp.status_code != 200:
         print("Request to gamma API erroring out, stopping execution")
@@ -105,8 +112,32 @@ def init_poly(offset, mongodb_client, mongodb_poly_kv_store_client, start_date_m
             new_market_list.append(new_market)
     return new_market_list
 
+
 async def init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler):
-    list_markets = mongodb_client.read_all(COLLECTION_NAME)
+    list_markets = []
+    processed_mappings = set()
+    
+    for idx_outer, platform_outer in enumerate(PLATFORMS):
+        for idx_inner, platform_inner in enumerate(PLATFORMS):
+            platforms = [platform_outer, platform_inner]
+            platforms.sort()
+            mapping_name = f"{platforms[0]}_{platforms[1]}_map"
+            
+            if idx_outer == idx_inner or (
+                platform_outer != "poly" and platform_inner != "poly"
+            ) or mapping_name in processed_mappings:
+                continue
+            
+            mapped_poly_markets = mongodb_client.read_all(
+                mapping_name
+            )
+
+            query = {
+                "_id": {"$in": [mapping["poly_id"] for mapping in mapped_poly_markets]}
+            }
+            
+            list_markets = list_markets + mongodb_client.read_all_with_query(COLLECTION_NAME, query)
+            processed_mappings.add(mapping_name)
 
     all_token_ids = [market["tokenIds"] for market in list_markets]
     flattened_token_ids = [

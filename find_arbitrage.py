@@ -25,7 +25,7 @@ async def run_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler
     await asyncio.gather(
         init_poly_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),
         init_drift_ws(mongodb_client, arbitrage_handler),
-        scrape_limitless_feed()
+        # scrape_limitless_feed()
     )
 
 if __name__ == "__main__":
@@ -36,10 +36,6 @@ if __name__ == "__main__":
         config["ATLAS_URI"], config["DB_NAME"], "polymarket_kv_store"
     )
     arbitrage_handler = ArbitrageHandler(mongodb_client)
-
-    init_poly(mongodb_client, mongodb_poly_kv_store_client)
-    init_drift(mongodb_client)
-    init_limitless(mongodb_client)
     
     asyncio.run(
         run_ws(mongodb_client, mongodb_poly_kv_store_client, arbitrage_handler),

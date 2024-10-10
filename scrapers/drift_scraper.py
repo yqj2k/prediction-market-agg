@@ -1,6 +1,7 @@
 import requests
-
+from datetime import datetime
 from constants.drift_constants import HARDCODED_MARKETS_MAP, HARDCODED_MARKETS_NAMES, MAX_PRICE
+from constants.global_constants import PLATFORMS
 import websocket_handler
 from websocket_processors.drift_ws_processor import DriftSubscriptionMessage, DriftWSProcessor
 
@@ -22,6 +23,7 @@ class Market:
         self.question = question
         self.prices = prices
         self.platform = "drift"
+        self.end_date = datetime.strptime("2024-10-05T12:00:00Z", "%Y-%m-%dT%H:%M:%SZ")
 
 def init_drift(mongodb_client):
     new_market_list = []
@@ -47,9 +49,23 @@ def init_drift(mongodb_client):
     return new_market_list
 
 async def init_drift_ws(mongodb_client, arbitrage_handler):
-    subscription_msgs = []
-    for market_name in HARDCODED_MARKETS_NAMES:
-        subscription_msgs.append(DriftSubscriptionMessage("subscribe", "perp", "orderbook", market_name))
+    list_markets = []
+    processed_mappings = set()
+
+    for idx_outer, platform_outer in enumerate(PLATFORMS):
+        for idx_inner, platform_inner in enumerate(PLATFORMS):
+            platforms = [platform_outer, platform_inner]
+            platforms.sort()
+            mapping_name = f"{platforms[0]}_{platforms[1]}_map"
+            
+            if idx_outer == idx_inner or (platform_outer != "drift" and platform_inner != "drift") or mapping_name in processed_mappings:
+                continue
+            
+            mapped_drift_markets = mongodb_client.read_all(mapping_name)
+            list_markets.extend([mapping["drift_id"] for mapping in mapped_drift_markets])
+            processed_mappings.add(mapping_name)
+            
+    subscription_msgs = list(map(lambda market_name: DriftSubscriptionMessage("subscribe", "perp", "orderbook", market_name), list_markets))
         
     drift_ws_processor = DriftWSProcessor(
         subscription_msgs,
