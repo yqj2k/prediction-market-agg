@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 from dotenv import dotenv_values
-config = dotenv_values(".env")
 from bson.objectid import ObjectId
+config = dotenv_values(".env")
 
 class MongoDBClient:
     def __init__(self, uri, db_name):
