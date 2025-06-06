@@ -23,6 +23,3 @@ Create .env file with ATLAS_URI and DB_NAME
 ## Get slug from event to polymarket URL:
 - take slug from event data (ie. 'superbowl-champion-2025' )
 - URL is polymarket.com/event/{slug}
-
-## problems
-- Create DB entry works, but returns error 500
